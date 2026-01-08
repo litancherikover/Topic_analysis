@@ -10,15 +10,37 @@ An interactive Streamlit dashboard for analyzing topics with filtering capabilit
 - 📋 **Data Tables**: Detailed tables with metrics
 - 💾 **Data Export**: Download filtered data as CSV
 
-## Installation
+## Quick Start
 
-1. Clone this repository:
+### Step 1: Clone the Repository
 ```bash
 git clone https://github.com/litancherikover/Topic_analysis.git
 cd Topic_analysis
 ```
 
-2. Install dependencies:
+### Step 2: Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### Step 3: Run the Streamlit App
+```bash
+streamlit run streamlit_app.py
+```
+
+The dashboard will automatically open in your browser at `http://localhost:8501`
+
+**Note:** The app automatically loads data from the GitHub repository, so no local CSV file is needed!
+
+## Installation
+
+1. **Clone this repository:**
+```bash
+git clone https://github.com/litancherikover/Topic_analysis.git
+cd Topic_analysis
+```
+
+2. **Install dependencies:**
 ```bash
 pip install -r requirements.txt
 ```
@@ -32,7 +54,11 @@ Run the interactive Streamlit dashboard:
 streamlit run streamlit_app.py
 ```
 
-The dashboard will open in your browser at `http://localhost:8501`
+The dashboard will:
+- Automatically load data from GitHub
+- Open in your browser at `http://localhost:8501`
+- Allow you to filter by date, level1, and level2 categories
+- Display top 10 topics with interactive visualizations
 
 ### Command Line Tool
 
