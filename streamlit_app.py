@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import pyarrow.parquet as pq
+from io import BytesIO
+import requests
 
 # Page configuration
 st.set_page_config(
@@ -35,14 +38,77 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 @st.cache_data
-def load_data(file_path_or_url):
-    """Load the CSV file from a local path or URL into a pandas DataFrame"""
+def load_data(file_path_or_url, file_type='auto', use_chunking=False, chunk_size=100000):
+    """
+    Load data from CSV or Parquet file (local path or URL) into a pandas DataFrame.
+    Optimized for large files with optional chunking.
+    
+    Parameters:
+    - file_path_or_url: Path to local file or URL
+    - file_type: 'auto', 'csv', or 'parquet'
+    - use_chunking: If True, load in chunks (for very large files)
+    - chunk_size: Number of rows per chunk
+    """
     try:
-        df = pd.read_csv(file_path_or_url)
-        df['date'] = pd.to_datetime(df['date'])
+        # Auto-detect file type
+        if file_type == 'auto':
+            if file_path_or_url.endswith('.parquet') or file_path_or_url.endswith('.pq'):
+                file_type = 'parquet'
+            elif file_path_or_url.endswith('.csv'):
+                file_type = 'csv'
+            else:
+                # Try to detect from URL or check first bytes
+                file_type = 'csv'  # Default to CSV
+        
+        # Check if it's a URL
+        is_url = file_path_or_url.startswith('http://') or file_path_or_url.startswith('https://')
+        
+        if file_type == 'parquet':
+            if is_url:
+                # Download parquet file
+                response = requests.get(file_path_or_url, stream=True)
+                response.raise_for_status()
+                parquet_file = BytesIO(response.content)
+                df = pd.read_parquet(parquet_file)
+            else:
+                # Read local parquet file
+                if use_chunking:
+                    # For very large files, read in chunks
+                    parquet_file = pq.ParquetFile(file_path_or_url)
+                    chunks = []
+                    for batch in parquet_file.iter_batches(batch_size=chunk_size):
+                        chunks.append(batch.to_pandas())
+                    df = pd.concat(chunks, ignore_index=True)
+                else:
+                    df = pd.read_parquet(file_path_or_url)
+        else:  # CSV
+            if is_url:
+                # For CSV from URL, use pandas directly
+                if use_chunking:
+                    chunks = []
+                    for chunk in pd.read_csv(file_path_or_url, chunksize=chunk_size):
+                        chunks.append(chunk)
+                    df = pd.concat(chunks, ignore_index=True)
+                else:
+                    df = pd.read_csv(file_path_or_url)
+            else:
+                # Local CSV file
+                if use_chunking:
+                    chunks = []
+                    for chunk in pd.read_csv(file_path_or_url, chunksize=chunk_size):
+                        chunks.append(chunk)
+                    df = pd.concat(chunks, ignore_index=True)
+                else:
+                    df = pd.read_csv(file_path_or_url)
+        
+        # Convert date column
+        if 'date' in df.columns:
+            df['date'] = pd.to_datetime(df['date'])
+        
         return df
     except Exception as e:
         st.error(f"Error loading file: {e}")
+        st.error(f"File type: {file_type}, URL: {is_url if 'is_url' in locals() else 'unknown'}")
         return None
 
 def aggregate_by_topic(df):
@@ -94,16 +160,70 @@ def main():
     # Header
     st.markdown('<h1 class="main-header">📊 Topic Analysis Dashboard</h1>', unsafe_allow_html=True)
     
-    # Load data from GitHub repository
-    github_csv_url = "https://raw.githubusercontent.com/litancherikover/Topic_analysis/main/Untitled_Notebook_2025_12_24_14_34_56.csv"
+    # Sidebar for data source configuration
+    st.sidebar.header("📁 Data Source")
     
-    with st.spinner("Loading data from GitHub..."):
-        df = load_data(github_csv_url)
+    data_source = st.sidebar.radio(
+        "Select Data Source",
+        ["GitHub CSV (Default)", "GitHub Parquet", "Local File", "Custom URL"],
+        index=0
+    )
+    
+    # File type selection
+    file_type = st.sidebar.selectbox("File Type", ["auto", "csv", "parquet"], index=0)
+    
+    # Chunking option for large files
+    use_chunking = st.sidebar.checkbox("Use Chunking (for large files >1GB)", value=False)
+    chunk_size = None
+    if use_chunking:
+        chunk_size = st.sidebar.number_input("Chunk Size (rows)", min_value=10000, max_value=1000000, value=100000, step=10000)
+    
+    # Determine data source URL/path
+    if data_source == "GitHub CSV (Default)":
+        data_url = "https://raw.githubusercontent.com/litancherikover/Topic_analysis/main/Untitled_Notebook_2025_12_24_14_34_56.csv"
+        file_type = "csv"
+    elif data_source == "GitHub Parquet":
+        data_url = st.sidebar.text_input(
+            "Parquet File URL",
+            value="https://raw.githubusercontent.com/litancherikover/Topic_analysis/main/data.parquet"
+        )
+        file_type = "parquet"
+    elif data_source == "Local File":
+        uploaded_file = st.sidebar.file_uploader("Upload CSV or Parquet file", type=['csv', 'parquet', 'pq'])
+        if uploaded_file:
+            data_url = uploaded_file
+            file_type = "auto"
+        else:
+            st.warning("Please upload a file")
+            st.stop()
+    else:  # Custom URL
+        data_url = st.sidebar.text_input("Enter file URL", value="")
+        if not data_url:
+            st.warning("Please enter a file URL")
+            st.stop()
+    
+    # Load data
+    loading_message = "Loading data..."
+    if use_chunking:
+        loading_message += f" (using chunks of {chunk_size:,} rows)"
+    
+    with st.spinner(loading_message):
+        if data_source == "Local File" and uploaded_file:
+            # For uploaded files, read directly
+            if uploaded_file.name.endswith('.parquet'):
+                df = pd.read_parquet(uploaded_file)
+            else:
+                df = pd.read_csv(uploaded_file)
+            if 'date' in df.columns:
+                df['date'] = pd.to_datetime(df['date'])
+        else:
+            df = load_data(data_url, file_type=file_type, use_chunking=use_chunking, chunk_size=chunk_size)
     
     if df is None:
         st.stop()
     
     # Sidebar filters
+    st.sidebar.divider()
     st.sidebar.header("🔍 Filters")
     
     # Date filter
