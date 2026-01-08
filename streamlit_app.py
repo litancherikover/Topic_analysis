@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from pathlib import Path
 
 # Page configuration
 st.set_page_config(
@@ -36,10 +35,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 @st.cache_data
-def load_data(file_path):
-    """Load the CSV file into a pandas DataFrame"""
+def load_data(file_path_or_url):
+    """Load the CSV file from a local path or URL into a pandas DataFrame"""
     try:
-        df = pd.read_csv(file_path)
+        df = pd.read_csv(file_path_or_url)
         df['date'] = pd.to_datetime(df['date'])
         return df
     except Exception as e:
@@ -95,9 +94,11 @@ def main():
     # Header
     st.markdown('<h1 class="main-header">📊 Topic Analysis Dashboard</h1>', unsafe_allow_html=True)
     
-    # Load data
-    default_file = Path(__file__).parent / "Untitled_Notebook_2025_12_24_14_34_56.csv"
-    df = load_data(str(default_file))
+    # Load data from GitHub repository
+    github_csv_url = "https://raw.githubusercontent.com/litancherikover/Topic_analysis/main/Untitled_Notebook_2025_12_24_14_34_56.csv"
+    
+    with st.spinner("Loading data from GitHub..."):
+        df = load_data(github_csv_url)
     
     if df is None:
         st.stop()
