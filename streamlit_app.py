@@ -445,6 +445,61 @@ def main():
         st.pyplot(fig)
         plt.close()
         
+        # ============================================
+        # TOP 10 TRENDS OVER TIME
+        # ============================================
+        if col_date and col_date in filtered_df.columns:
+            st.subheader(f"📊 Top 10 Trends Over Time")
+            
+            # Get top 10 topics
+            top_10_topics = aggregated.head(10)[col_topic].tolist()
+            
+            # Filter data for top 10 topics only
+            trends_df = filtered_df[filtered_df[col_topic].isin(top_10_topics)].copy()
+            
+            if len(trends_df) > 0 and col_conversations and col_conversations != 'None':
+                # Aggregate by date and topic
+                trends_agg = trends_df.groupby([col_date, col_topic], as_index=False).agg({
+                    col_conversations: 'sum'
+                })
+                
+                # Create line plot
+                fig2, ax2 = plt.subplots(figsize=(14, 8))
+                
+                # Get color palette
+                colors = sns.color_palette("husl", len(top_10_topics))
+                
+                for i, topic in enumerate(top_10_topics):
+                    topic_data = trends_agg[trends_agg[col_topic] == topic].sort_values(col_date)
+                    if len(topic_data) > 0:
+                        # Truncate long topic names for legend
+                        label = topic[:40] + '...' if len(str(topic)) > 40 else topic
+                        ax2.plot(topic_data[col_date], topic_data[col_conversations], 
+                                marker='o', linewidth=2, markersize=4,
+                                label=label, color=colors[i])
+                
+                ax2.set_xlabel('Date', fontsize=12, fontweight='bold')
+                ax2.set_ylabel(col_conversations, fontsize=12, fontweight='bold')
+                ax2.set_title(f'Top 10 Topics Trend Over Time{title_suffix}', fontsize=14, fontweight='bold', pad=20)
+                
+                # Rotate x-axis labels for better readability
+                plt.xticks(rotation=45, ha='right')
+                
+                # Add legend outside the plot
+                ax2.legend(bbox_to_anchor=(1.02, 1), loc='upper left', fontsize=8)
+                
+                ax2.grid(axis='both', alpha=0.3, linestyle='--')
+                ax2.spines['top'].set_visible(False)
+                ax2.spines['right'].set_visible(False)
+                
+                plt.tight_layout()
+                st.pyplot(fig2)
+                plt.close()
+            else:
+                st.info("ℹ️ Need date and conversations columns to show trends over time.")
+        else:
+            st.info("ℹ️ No date column available to show trends over time.")
+        
         # Display top 10 table
         st.subheader("📋 Top 10 Topics Table")
         
