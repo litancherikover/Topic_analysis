@@ -222,86 +222,134 @@ def main():
     if df is None:
         st.stop()
     
-    # Show available columns for debugging
-    st.sidebar.divider()
-    with st.sidebar.expander("📋 Available Columns"):
-        st.write(df.columns.tolist())
+    # Auto-detect columns
+    col_level1 = None
+    col_level2 = None
+    col_topic = None
+    col_date = None
+    col_conversations = None
+    col_users = None
+    col_messages = None
     
-    # Column mapping - detect or use defaults
     # Try to find the right columns automatically
-    col_level1 = 'level1' if 'level1' in df.columns else ('category' if 'category' in df.columns else None)
-    col_level2 = 'level2' if 'level2' in df.columns else ('subcategory' if 'subcategory' in df.columns else None)
-    col_topic = 'topic' if 'topic' in df.columns else ('prompt' if 'prompt' in df.columns else None)
-    col_date = 'date' if 'date' in df.columns else None
-    col_conversations = 'raw_conversations' if 'raw_conversations' in df.columns else ('conversations' if 'conversations' in df.columns else None)
-    col_users = 'raw_users' if 'raw_users' in df.columns else ('users' if 'users' in df.columns else None)
-    col_messages = 'raw_messages' if 'raw_messages' in df.columns else ('messages' if 'messages' in df.columns else None)
+    for col in df.columns:
+        col_lower = col.lower()
+        if col_lower in ['level1', 'category', 'l1', 'cat']:
+            col_level1 = col
+        elif col_lower in ['level2', 'subcategory', 'l2', 'subcat', 'sub_category']:
+            col_level2 = col
+        elif col_lower in ['topic', 'prompt', 'query', 'search_term']:
+            col_topic = col
+        elif col_lower in ['date', 'datetime', 'timestamp']:
+            col_date = col
+        elif col_lower in ['raw_conversations', 'conversations', 'conv', 'count']:
+            col_conversations = col
+        elif col_lower in ['raw_users', 'users', 'user_count']:
+            col_users = col
+        elif col_lower in ['raw_messages', 'messages', 'msg_count']:
+            col_messages = col
     
-    # Let user select columns if auto-detection fails
-    st.sidebar.header("⚙️ Column Mapping")
-    all_columns = ['None'] + df.columns.tolist()
-    
-    col_level1 = st.sidebar.selectbox("Category Column (Level 1)", all_columns, index=all_columns.index(col_level1) if col_level1 in all_columns else 0)
-    col_level2 = st.sidebar.selectbox("Subcategory Column (Level 2)", all_columns, index=all_columns.index(col_level2) if col_level2 in all_columns else 0)
-    col_topic = st.sidebar.selectbox("Topic/Prompt Column", all_columns, index=all_columns.index(col_topic) if col_topic in all_columns else 0)
-    col_conversations = st.sidebar.selectbox("Conversations Column", all_columns, index=all_columns.index(col_conversations) if col_conversations in all_columns else 0)
-    
-    # Sidebar filters
+    # Column mapping in expander (for advanced users)
     st.sidebar.divider()
-    st.sidebar.header("🔍 Filters")
+    with st.sidebar.expander("⚙️ Column Mapping (click to configure)"):
+        st.caption("Select which columns to use for filtering and analysis")
+        all_columns = ['None'] + df.columns.tolist()
+        
+        col_level1 = st.selectbox("Category Column", all_columns, 
+                                   index=all_columns.index(col_level1) if col_level1 in all_columns else 0,
+                                   key="col_level1")
+        col_level2 = st.selectbox("Subcategory Column", all_columns, 
+                                   index=all_columns.index(col_level2) if col_level2 in all_columns else 0,
+                                   key="col_level2")
+        col_topic = st.selectbox("Topic/Prompt Column", all_columns, 
+                                  index=all_columns.index(col_topic) if col_topic in all_columns else 0,
+                                  key="col_topic")
+        col_conversations = st.selectbox("Metric Column (for ranking)", all_columns, 
+                                          index=all_columns.index(col_conversations) if col_conversations in all_columns else 0,
+                                          key="col_conv")
+        
+        st.caption(f"Available columns: {', '.join(df.columns.tolist())}")
+    
+    # ============================================
+    # MAIN FILTERS SECTION
+    # ============================================
+    st.sidebar.header("🔍 Filter Data")
+    
+    # Category filter (Level 1)
+    selected_level1 = 'All'
+    if col_level1 and col_level1 != 'None' and col_level1 in df.columns:
+        level1_values = sorted([str(x) for x in df[col_level1].dropna().unique().tolist()])
+        level1_options = ['All'] + level1_values
+        selected_level1 = st.sidebar.selectbox(
+            f"📁 Category ({col_level1})", 
+            level1_options,
+            help=f"Filter by {col_level1} - {len(level1_values)} unique values"
+        )
+    else:
+        st.sidebar.warning("⚠️ No category column detected. Configure in Column Mapping above.")
+    
+    # Subcategory filter (Level 2) - dependent on category
+    selected_level2 = 'All'
+    if col_level2 and col_level2 != 'None' and col_level2 in df.columns:
+        if selected_level1 == 'All':
+            level2_values = sorted([str(x) for x in df[col_level2].dropna().unique().tolist()])
+        else:
+            level2_values = sorted([str(x) for x in df[df[col_level1] == selected_level1][col_level2].dropna().unique().tolist()])
+        level2_options = ['All'] + level2_values
+        selected_level2 = st.sidebar.selectbox(
+            f"📂 Subcategory ({col_level2})", 
+            level2_options,
+            help=f"Filter by {col_level2} - {len(level2_values)} unique values"
+        )
     
     # Date filter (if date column exists)
     start_date = end_date = None
     if col_date and col_date in df.columns:
-        df[col_date] = pd.to_datetime(df[col_date])
-        min_date = df[col_date].min().date()
-        max_date = df[col_date].max().date()
-        
-        date_range = st.sidebar.date_input(
-            "Select Date Range",
-            value=(min_date, max_date),
-            min_value=min_date,
-            max_value=max_date
-        )
-        
-        # Handle single date selection
-        if isinstance(date_range, tuple) and len(date_range) == 2:
-            start_date, end_date = date_range
-        else:
-            start_date = end_date = date_range
+        try:
+            df[col_date] = pd.to_datetime(df[col_date])
+            min_date = df[col_date].min().date()
+            max_date = df[col_date].max().date()
+            
+            date_range = st.sidebar.date_input(
+                "📅 Date Range",
+                value=(min_date, max_date),
+                min_value=min_date,
+                max_value=max_date
+            )
+            
+            if isinstance(date_range, tuple) and len(date_range) == 2:
+                start_date, end_date = date_range
+            else:
+                start_date = end_date = date_range
+        except Exception:
+            pass  # Skip date filter if conversion fails
     
-    # Level1 filter
-    selected_level1 = 'All'
-    if col_level1 and col_level1 != 'None' and col_level1 in df.columns:
-        level1_options = ['All'] + sorted(df[col_level1].dropna().unique().tolist())
-        selected_level1 = st.sidebar.selectbox("Category (Level 1)", level1_options)
-    
-    # Level2 filter (dependent on level1)
-    selected_level2 = 'All'
-    if col_level2 and col_level2 != 'None' and col_level2 in df.columns:
-        if selected_level1 == 'All':
-            level2_options = ['All'] + sorted(df[col_level2].dropna().unique().tolist())
-        else:
-            level2_options = ['All'] + sorted(df[df[col_level1] == selected_level1][col_level2].dropna().unique().tolist())
-        selected_level2 = st.sidebar.selectbox("Subcategory (Level 2)", level2_options)
-    
-    # Apply filters
+    # ============================================
+    # APPLY FILTERS
+    # ============================================
     filtered_df = df.copy()
     
-    # Date filter
-    if col_date and col_date in df.columns and start_date and end_date:
-        filtered_df = filtered_df[
-            (filtered_df[col_date].dt.date >= start_date) & 
-            (filtered_df[col_date].dt.date <= end_date)
-        ]
-    
-    # Level1 filter
+    # Apply category filter
     if selected_level1 != 'All' and col_level1 and col_level1 != 'None':
-        filtered_df = filtered_df[filtered_df[col_level1] == selected_level1]
+        filtered_df = filtered_df[filtered_df[col_level1].astype(str) == selected_level1]
     
-    # Level2 filter
+    # Apply subcategory filter
     if selected_level2 != 'All' and col_level2 and col_level2 != 'None':
-        filtered_df = filtered_df[filtered_df[col_level2] == selected_level2]
+        filtered_df = filtered_df[filtered_df[col_level2].astype(str) == selected_level2]
+    
+    # Apply date filter
+    if col_date and col_date in df.columns and start_date and end_date:
+        try:
+            filtered_df = filtered_df[
+                (filtered_df[col_date].dt.date >= start_date) & 
+                (filtered_df[col_date].dt.date <= end_date)
+            ]
+        except Exception:
+            pass
+    
+    # Show filter summary
+    st.sidebar.divider()
+    st.sidebar.success(f"✅ Showing {len(filtered_df):,} of {len(df):,} rows")
     
     # Main content area
     col1, col2, col3, col4 = st.columns(4)
