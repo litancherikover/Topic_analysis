@@ -160,64 +160,16 @@ def main():
     # Header
     st.markdown('<h1 class="main-header">📊 Topic Analysis Dashboard</h1>', unsafe_allow_html=True)
     
-    # Sidebar for data source configuration
-    st.sidebar.header("📁 Data Source")
-    
-    data_source = st.sidebar.radio(
-        "Select Data Source",
-        ["GitHub CSV (Default)", "GitHub Parquet", "Local File", "Custom URL"],
-        index=0
-    )
-    
-    # File type selection
-    file_type = st.sidebar.selectbox("File Type", ["auto", "csv", "parquet"], index=0)
-    
-    # Chunking option for large files
-    use_chunking = st.sidebar.checkbox("Use Chunking (for large files >1GB)", value=False)
+    # Default data source - load from GitHub
+    data_url = "https://raw.githubusercontent.com/litancherikover/Topic_analysis/main/Prompts.csv"
+    file_type = "csv"
+    use_chunking = False
     chunk_size = None
-    if use_chunking:
-        chunk_size = st.sidebar.number_input("Chunk Size (rows)", min_value=10000, max_value=1000000, value=100000, step=10000)
-    
-    # Determine data source URL/path
-    if data_source == "GitHub CSV (Default)":
-        data_url = "https://raw.githubusercontent.com/litancherikover/Topic_analysis/main/Prompts.csv"
-        file_type = "csv"
-    elif data_source == "GitHub Parquet":
-        data_url = st.sidebar.text_input(
-            "Parquet File URL",
-            value="https://raw.githubusercontent.com/litancherikover/Topic_analysis/main/Prompts.parquet"
-        )
-        file_type = "parquet"
-    elif data_source == "Local File":
-        uploaded_file = st.sidebar.file_uploader("Upload CSV or Parquet file", type=['csv', 'parquet', 'pq'])
-        if uploaded_file:
-            data_url = uploaded_file
-            file_type = "auto"
-        else:
-            st.warning("Please upload a file")
-            st.stop()
-    else:  # Custom URL
-        data_url = st.sidebar.text_input("Enter file URL", value="")
-        if not data_url:
-            st.warning("Please enter a file URL")
-            st.stop()
+    uploaded_file = None
     
     # Load data
-    loading_message = "Loading data..."
-    if use_chunking:
-        loading_message += f" (using chunks of {chunk_size:,} rows)"
-    
-    with st.spinner(loading_message):
-        if data_source == "Local File" and uploaded_file:
-            # For uploaded files, read directly
-            if uploaded_file.name.endswith('.parquet'):
-                df = pd.read_parquet(uploaded_file)
-            else:
-                df = pd.read_csv(uploaded_file)
-            if 'date' in df.columns:
-                df['date'] = pd.to_datetime(df['date'])
-        else:
-            df = load_data(data_url, file_type=file_type, use_chunking=use_chunking, chunk_size=chunk_size)
+    with st.spinner("Loading data..."):
+        df = load_data(data_url, file_type=file_type, use_chunking=use_chunking, chunk_size=chunk_size)
     
     if df is None:
         st.stop()
