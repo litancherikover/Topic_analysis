@@ -11,8 +11,11 @@ ENV/
 
 # Data files (large CSV)
 *.csv
+!Prompts.csv
 *.xlsx
 *.xls
+*.parquet
+!Prompts.parquet
 
 # Matplotlib
 .mplcache/

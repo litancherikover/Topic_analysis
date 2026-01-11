@@ -180,12 +180,12 @@ def main():
     
     # Determine data source URL/path
     if data_source == "GitHub CSV (Default)":
-        data_url = "https://raw.githubusercontent.com/litancherikover/Topic_analysis/main/Untitled_Notebook_2025_12_24_14_34_56.csv"
+        data_url = "https://raw.githubusercontent.com/litancherikover/Topic_analysis/main/Prompts.csv"
         file_type = "csv"
     elif data_source == "GitHub Parquet":
         data_url = st.sidebar.text_input(
             "Parquet File URL",
-            value="https://raw.githubusercontent.com/litancherikover/Topic_analysis/main/data.parquet"
+            value="https://raw.githubusercontent.com/litancherikover/Topic_analysis/main/Prompts.parquet"
         )
         file_type = "parquet"
     elif data_source == "Local File":
