@@ -5,6 +5,8 @@ import seaborn as sns
 import pyarrow.parquet as pq
 from io import BytesIO
 import requests
+import plotly.express as px
+import plotly.graph_objects as go
 
 # Page configuration
 st.set_page_config(
@@ -423,44 +425,53 @@ def main():
                 
                 # Sort by date
                 trends_agg = trends_agg.sort_values('date_only')
+                trends_agg['date_only'] = pd.to_datetime(trends_agg['date_only'])
                 
-                # Create line plot
-                fig2, ax2 = plt.subplots(figsize=(14, 8))
+                # Create interactive Plotly line chart
+                fig2 = px.line(
+                    trends_agg,
+                    x='date_only',
+                    y=col_conversations,
+                    color=col_topic,
+                    title=f'Top 10 Topics Trend Over Time{title_suffix}',
+                    labels={
+                        'date_only': 'Date',
+                        col_conversations: col_conversations,
+                        col_topic: 'Topic'
+                    },
+                    markers=True
+                )
                 
-                # Get color palette
-                colors = sns.color_palette("husl", len(top_10_topics))
+                # Update layout for better appearance
+                fig2.update_layout(
+                    xaxis_title="Date",
+                    yaxis_title=col_conversations,
+                    legend_title="Topic",
+                    hovermode='x unified',
+                    height=600,
+                    legend=dict(
+                        orientation="h",
+                        yanchor="bottom",
+                        y=-0.4,
+                        xanchor="center",
+                        x=0.5,
+                        font=dict(size=10)
+                    )
+                )
                 
-                for i, topic in enumerate(top_10_topics):
-                    topic_data = trends_agg[trends_agg[col_topic] == topic].sort_values('date_only')
-                    if len(topic_data) > 0:
-                        # Truncate long topic names for legend
-                        label = topic[:40] + '...' if len(str(topic)) > 40 else topic
-                        ax2.plot(topic_data['date_only'], topic_data[col_conversations], 
-                                marker='o', linewidth=2, markersize=4,
-                                label=label, color=colors[i])
+                # Format x-axis dates
+                fig2.update_xaxes(
+                    tickformat="%Y-%m-%d",
+                    tickangle=45
+                )
                 
-                ax2.set_xlabel('Date', fontsize=12, fontweight='bold')
-                ax2.set_ylabel(col_conversations, fontsize=12, fontweight='bold')
-                ax2.set_title(f'Top 10 Topics Trend Over Time{title_suffix}', fontsize=14, fontweight='bold', pad=20)
+                # Add hover template
+                fig2.update_traces(
+                    hovertemplate='<b>%{fullData.name}</b><br>Date: %{x|%Y-%m-%d}<br>Conversations: %{y:,.0f}<extra></extra>'
+                )
                 
-                # Format x-axis to show dates properly
-                import matplotlib.dates as mdates
-                ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-                ax2.xaxis.set_major_locator(mdates.AutoDateLocator())
-                
-                # Rotate x-axis labels for better readability
-                plt.xticks(rotation=45, ha='right')
-                
-                # Add legend outside the plot
-                ax2.legend(bbox_to_anchor=(1.02, 1), loc='upper left', fontsize=8)
-                
-                ax2.grid(axis='both', alpha=0.3, linestyle='--')
-                ax2.spines['top'].set_visible(False)
-                ax2.spines['right'].set_visible(False)
-                
-                plt.tight_layout()
-                st.pyplot(fig2)
-                plt.close()
+                # Display interactive chart
+                st.plotly_chart(fig2, use_container_width=True)
             else:
                 st.info("ℹ️ Need date and conversations columns to show trends over time.")
         else:
