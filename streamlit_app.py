@@ -421,8 +421,11 @@ def main():
         
         title_suffix = f" ({', '.join(title_parts)})" if title_parts else ""
         
-        # Create and display plot
-        top_topics = aggregated.head(10)
+        # Create filtered version for charts (exclude "all" topic as it skews visualization)
+        aggregated_for_charts = aggregated[~aggregated[col_topic].astype(str).str.lower().isin(['all', 'total', 'overall'])].copy()
+        
+        # Create and display plot (using filtered data without "all")
+        top_topics = aggregated_for_charts.head(10)
         
         fig, ax = plt.subplots(figsize=(14, 8))
         bars = ax.barh(range(len(top_topics)), top_topics[sort_col], 
@@ -451,8 +454,8 @@ def main():
         if col_date and col_date in filtered_df.columns:
             st.subheader(f"📊 Top 10 Trends Over Time")
             
-            # Get top 10 topics
-            top_10_topics = aggregated.head(10)[col_topic].tolist()
+            # Get top 10 topics (excluding "all" for charts)
+            top_10_topics = aggregated_for_charts.head(10)[col_topic].tolist()
             
             # Filter data for top 10 topics only
             trends_df = filtered_df[filtered_df[col_topic].isin(top_10_topics)].copy()
