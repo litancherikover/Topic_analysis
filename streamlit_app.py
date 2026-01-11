@@ -222,56 +222,86 @@ def main():
     if df is None:
         st.stop()
     
+    # Show available columns for debugging
+    st.sidebar.divider()
+    with st.sidebar.expander("📋 Available Columns"):
+        st.write(df.columns.tolist())
+    
+    # Column mapping - detect or use defaults
+    # Try to find the right columns automatically
+    col_level1 = 'level1' if 'level1' in df.columns else ('category' if 'category' in df.columns else None)
+    col_level2 = 'level2' if 'level2' in df.columns else ('subcategory' if 'subcategory' in df.columns else None)
+    col_topic = 'topic' if 'topic' in df.columns else ('prompt' if 'prompt' in df.columns else None)
+    col_date = 'date' if 'date' in df.columns else None
+    col_conversations = 'raw_conversations' if 'raw_conversations' in df.columns else ('conversations' if 'conversations' in df.columns else None)
+    col_users = 'raw_users' if 'raw_users' in df.columns else ('users' if 'users' in df.columns else None)
+    col_messages = 'raw_messages' if 'raw_messages' in df.columns else ('messages' if 'messages' in df.columns else None)
+    
+    # Let user select columns if auto-detection fails
+    st.sidebar.header("⚙️ Column Mapping")
+    all_columns = ['None'] + df.columns.tolist()
+    
+    col_level1 = st.sidebar.selectbox("Category Column (Level 1)", all_columns, index=all_columns.index(col_level1) if col_level1 in all_columns else 0)
+    col_level2 = st.sidebar.selectbox("Subcategory Column (Level 2)", all_columns, index=all_columns.index(col_level2) if col_level2 in all_columns else 0)
+    col_topic = st.sidebar.selectbox("Topic/Prompt Column", all_columns, index=all_columns.index(col_topic) if col_topic in all_columns else 0)
+    col_conversations = st.sidebar.selectbox("Conversations Column", all_columns, index=all_columns.index(col_conversations) if col_conversations in all_columns else 0)
+    
     # Sidebar filters
     st.sidebar.divider()
     st.sidebar.header("🔍 Filters")
     
-    # Date filter
-    min_date = df['date'].min().date()
-    max_date = df['date'].max().date()
-    
-    date_range = st.sidebar.date_input(
-        "Select Date Range",
-        value=(min_date, max_date),
-        min_value=min_date,
-        max_value=max_date
-    )
-    
-    # Handle single date selection
-    if isinstance(date_range, tuple) and len(date_range) == 2:
-        start_date, end_date = date_range
-    else:
-        start_date = end_date = date_range
+    # Date filter (if date column exists)
+    start_date = end_date = None
+    if col_date and col_date in df.columns:
+        df[col_date] = pd.to_datetime(df[col_date])
+        min_date = df[col_date].min().date()
+        max_date = df[col_date].max().date()
+        
+        date_range = st.sidebar.date_input(
+            "Select Date Range",
+            value=(min_date, max_date),
+            min_value=min_date,
+            max_value=max_date
+        )
+        
+        # Handle single date selection
+        if isinstance(date_range, tuple) and len(date_range) == 2:
+            start_date, end_date = date_range
+        else:
+            start_date = end_date = date_range
     
     # Level1 filter
-    level1_options = ['All'] + sorted(df['level1'].unique().tolist())
-    selected_level1 = st.sidebar.selectbox("Level 1 Category", level1_options)
+    selected_level1 = 'All'
+    if col_level1 and col_level1 != 'None' and col_level1 in df.columns:
+        level1_options = ['All'] + sorted(df[col_level1].dropna().unique().tolist())
+        selected_level1 = st.sidebar.selectbox("Category (Level 1)", level1_options)
     
     # Level2 filter (dependent on level1)
-    if selected_level1 == 'All':
-        level2_options = ['All'] + sorted(df['level2'].unique().tolist())
-    else:
-        level2_options = ['All'] + sorted(df[df['level1'] == selected_level1]['level2'].unique().tolist())
-    
-    selected_level2 = st.sidebar.selectbox("Level 2 Category", level2_options)
+    selected_level2 = 'All'
+    if col_level2 and col_level2 != 'None' and col_level2 in df.columns:
+        if selected_level1 == 'All':
+            level2_options = ['All'] + sorted(df[col_level2].dropna().unique().tolist())
+        else:
+            level2_options = ['All'] + sorted(df[df[col_level1] == selected_level1][col_level2].dropna().unique().tolist())
+        selected_level2 = st.sidebar.selectbox("Subcategory (Level 2)", level2_options)
     
     # Apply filters
     filtered_df = df.copy()
     
     # Date filter
-    if isinstance(date_range, tuple) and len(date_range) == 2:
+    if col_date and col_date in df.columns and start_date and end_date:
         filtered_df = filtered_df[
-            (filtered_df['date'].dt.date >= start_date) & 
-            (filtered_df['date'].dt.date <= end_date)
+            (filtered_df[col_date].dt.date >= start_date) & 
+            (filtered_df[col_date].dt.date <= end_date)
         ]
     
     # Level1 filter
-    if selected_level1 != 'All':
-        filtered_df = filtered_df[filtered_df['level1'] == selected_level1]
+    if selected_level1 != 'All' and col_level1 and col_level1 != 'None':
+        filtered_df = filtered_df[filtered_df[col_level1] == selected_level1]
     
     # Level2 filter
-    if selected_level2 != 'All':
-        filtered_df = filtered_df[filtered_df['level2'] == selected_level2]
+    if selected_level2 != 'All' and col_level2 and col_level2 != 'None':
+        filtered_df = filtered_df[filtered_df[col_level2] == selected_level2]
     
     # Main content area
     col1, col2, col3, col4 = st.columns(4)
@@ -280,30 +310,62 @@ def main():
         st.metric("Total Rows", f"{len(filtered_df):,}")
     
     with col2:
-        st.metric("Unique Topics", f"{filtered_df['topic'].nunique():,}")
+        if col_topic and col_topic != 'None' and col_topic in filtered_df.columns:
+            st.metric("Unique Topics", f"{filtered_df[col_topic].nunique():,}")
+        else:
+            st.metric("Unique Topics", "N/A")
     
     with col3:
-        st.metric("Total Conversations", f"{filtered_df['raw_conversations'].sum():,}")
+        if col_conversations and col_conversations != 'None' and col_conversations in filtered_df.columns:
+            st.metric("Total Conversations", f"{filtered_df[col_conversations].sum():,}")
+        else:
+            st.metric("Total Conversations", "N/A")
     
     with col4:
-        st.metric("Total Users", f"{filtered_df['raw_users'].sum():,}")
+        if col_users and col_users != 'None' and col_users in filtered_df.columns:
+            st.metric("Total Users", f"{filtered_df[col_users].sum():,}")
+        else:
+            st.metric("Total Users", "N/A")
     
     st.divider()
     
     # Aggregated data
     if len(filtered_df) > 0:
-        aggregated = aggregate_by_topic(filtered_df)
+        # Aggregate by topic column
+        if col_topic and col_topic != 'None' and col_topic in filtered_df.columns:
+            # Build aggregation dict dynamically
+            agg_dict = {}
+            if col_conversations and col_conversations != 'None' and col_conversations in filtered_df.columns:
+                agg_dict[col_conversations] = 'sum'
+            if col_messages and col_messages != 'None' and col_messages in filtered_df.columns:
+                agg_dict[col_messages] = 'sum'
+            if col_users and col_users != 'None' and col_users in filtered_df.columns:
+                agg_dict[col_users] = 'sum'
+            
+            if agg_dict:
+                aggregated = filtered_df.groupby(col_topic, as_index=False).agg(agg_dict)
+                sort_col = col_conversations if col_conversations and col_conversations != 'None' else list(agg_dict.keys())[0]
+                aggregated = aggregated.sort_values(sort_col, ascending=False)
+            else:
+                # Just count occurrences
+                aggregated = filtered_df[col_topic].value_counts().reset_index()
+                aggregated.columns = [col_topic, 'count']
+                sort_col = 'count'
+        else:
+            st.warning("⚠️ Please select a Topic/Prompt column to aggregate data.")
+            st.stop()
         
         # Top 10 topics visualization
-        st.subheader("📈 Top 10 Topics by Raw Conversations")
+        metric_name = col_conversations if col_conversations and col_conversations != 'None' else sort_col
+        st.subheader(f"📈 Top 10 Topics by {metric_name}")
         
         # Create title suffix for filters
         title_parts = []
         if selected_level1 != 'All':
-            title_parts.append(f"level1: {selected_level1}")
+            title_parts.append(f"category: {selected_level1}")
         if selected_level2 != 'All':
-            title_parts.append(f"level2: {selected_level2}")
-        if isinstance(date_range, tuple) and len(date_range) == 2:
+            title_parts.append(f"subcategory: {selected_level2}")
+        if start_date and end_date:
             if start_date != end_date:
                 title_parts.append(f"dates: {start_date} to {end_date}")
             else:
@@ -312,15 +374,33 @@ def main():
         title_suffix = f" ({', '.join(title_parts)})" if title_parts else ""
         
         # Create and display plot
-        fig = create_top_topics_plot(aggregated, top_n=10, title_suffix=title_suffix)
+        top_topics = aggregated.head(10)
+        
+        fig, ax = plt.subplots(figsize=(14, 8))
+        bars = ax.barh(range(len(top_topics)), top_topics[sort_col], 
+                       color=sns.color_palette("viridis", len(top_topics)))
+        
+        ax.set_yticks(range(len(top_topics)))
+        ax.set_yticklabels(top_topics[col_topic], fontsize=10)
+        ax.set_xlabel(metric_name, fontsize=12, fontweight='bold')
+        ax.set_title(f'Top 10 Topics by {metric_name}{title_suffix}', fontsize=14, fontweight='bold', pad=20)
+        
+        for i, val in enumerate(top_topics[sort_col]):
+            ax.text(val, i, f' {val:,.0f}', va='center', fontsize=9, fontweight='bold')
+        
+        ax.invert_yaxis()
+        ax.grid(axis='x', alpha=0.3, linestyle='--')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        plt.tight_layout()
+        
         st.pyplot(fig)
         plt.close()
         
         # Display top 10 table
         st.subheader("📋 Top 10 Topics Table")
         
-        display_df = aggregated.head(10)[['topic', 'raw_conversations', 'raw_messages', 'raw_users']].copy()
-        display_df.columns = ['Topic', 'Conversations', 'Messages', 'Users']
+        display_df = aggregated.head(10).copy()
         display_df.index = range(1, len(display_df) + 1)
         
         st.dataframe(
