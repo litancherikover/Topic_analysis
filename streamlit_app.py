@@ -163,7 +163,7 @@ def main():
     st.markdown('<h1 class="main-header">📊 Topic Analysis Dashboard</h1>', unsafe_allow_html=True)
     
     # Default data source - load from GitHub
-    data_url = "https://raw.githubusercontent.com/litancherikover/Topic_analysis/main/Prompts.csv"
+    data_url = "https://raw.githubusercontent.com/litancherikover/Topic_analysis/main/Prompts%20(1).csv"
     file_type = "csv"
     use_chunking = False
     chunk_size = None
