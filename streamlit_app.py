@@ -203,8 +203,12 @@ def main():
         elif col_lower in ['raw_messages', 'messages', 'msg_count']:
             col_messages = col
     
+    # ============================================
+    # SIDEBAR - TRENDING TOPICS TAB
+    # ============================================
+    st.sidebar.header("📈 Trending Topics")
+    
     # Column mapping in expander (for advanced users)
-    st.sidebar.divider()
     with st.sidebar.expander("⚙️ Column Mapping (click to configure)"):
         st.caption("Select which columns to use for filtering and analysis")
         all_columns = ['None'] + df.columns.tolist()
@@ -224,10 +228,8 @@ def main():
         
         st.caption(f"Available columns: {', '.join(df.columns.tolist())}")
     
-    # ============================================
-    # MAIN FILTERS SECTION
-    # ============================================
-    st.sidebar.header("🔍 Filter Data")
+    # Filters section
+    st.sidebar.subheader("🔍 Filters")
     
     # Category filter (Level 1)
     selected_level1 = 'All'
@@ -533,15 +535,14 @@ def main():
         st.warning("⚠️ No data found with the selected filters. Please adjust your filter criteria.")
     
     # Sidebar info
-    st.sidebar.divider()
-    st.sidebar.info("""
-    **How to use:**
-    1. Select date range (if multiple dates available)
-    2. Choose Level 1 category
-    3. Choose Level 2 category (filtered by Level 1)
-    4. View top 10 topics visualization
-    5. Download filtered data if needed
-    """)
+    with st.sidebar.expander("ℹ️ How to use"):
+        st.markdown("""
+        1. Select date range (if available)
+        2. Choose Category filter
+        3. Choose Subcategory filter
+        4. View top 10 topics visualization
+        5. Download filtered data if needed
+        """)
 
 if __name__ == "__main__":
     main()
