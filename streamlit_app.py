@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 
 # Page configuration
 st.set_page_config(
-    page_title="Topic Analysis Dashboard",
+    page_title="Topic Analysis Tool",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -160,7 +160,7 @@ def create_top_topics_plot(df, top_n=10, title_suffix=""):
 
 def main():
     # Header
-    st.markdown('<h1 class="main-header">📊 Topic Analysis Dashboard</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">📊 Topic Analysis Tool</h1>', unsafe_allow_html=True)
     
     # Default data source - load from GitHub
     data_url = "https://raw.githubusercontent.com/litancherikover/Topic_analysis/main/Prompts%20(1).csv"
@@ -379,28 +379,58 @@ def main():
         aggregated_for_charts = aggregated[~aggregated[col_topic].astype(str).str.lower().isin(['all', 'total', 'overall'])].copy()
         
         # Create and display plot (using filtered data without "all")
-        top_topics = aggregated_for_charts.head(10)
+        top_topics = aggregated_for_charts.head(10).copy()
         
-        fig, ax = plt.subplots(figsize=(14, 8))
-        bars = ax.barh(range(len(top_topics)), top_topics[sort_col], 
-                       color=sns.color_palette("viridis", len(top_topics)))
+        # Reverse order so highest is at top when displayed
+        top_topics = top_topics.iloc[::-1]
         
-        ax.set_yticks(range(len(top_topics)))
-        ax.set_yticklabels(top_topics[col_topic], fontsize=10)
-        ax.set_xlabel(metric_name, fontsize=12, fontweight='bold')
-        ax.set_title(f'Top 10 Topics by {metric_name}{title_suffix}', fontsize=14, fontweight='bold', pad=20)
+        # Create viridis color scale (reversed to match original order - highest gets darkest)
+        n_topics = len(top_topics)
+        viridis_colors = px.colors.sample_colorscale('viridis', [i/(n_topics-1) if n_topics > 1 else 0 for i in range(n_topics)])
         
-        for i, val in enumerate(top_topics[sort_col]):
-            ax.text(val, i, f' {val:,.0f}', va='center', fontsize=9, fontweight='bold')
+        # Create interactive Plotly horizontal bar chart
+        fig = go.Figure(go.Bar(
+            x=top_topics[sort_col],
+            y=top_topics[col_topic],
+            orientation='h',
+            marker=dict(color=viridis_colors),
+            text=[f'{val:,.0f}' for val in top_topics[sort_col]],
+            textposition='outside',
+            textfont=dict(size=11, color='black'),
+            hovertemplate='<b>%{y}</b><br>' + f'{metric_name}: ' + '%{x:,.0f}<extra></extra>'
+        ))
         
-        ax.invert_yaxis()
-        ax.grid(axis='x', alpha=0.3, linestyle='--')
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        plt.tight_layout()
+        # Update layout to match original style
+        fig.update_layout(
+            title=dict(
+                text=f'Top 10 Topics by {metric_name}{title_suffix}',
+                font=dict(size=14, color='black'),
+                x=0.5,
+                xanchor='center'
+            ),
+            xaxis=dict(
+                title=dict(text=metric_name, font=dict(size=12)),
+                showgrid=True,
+                gridwidth=1,
+                gridcolor='rgba(128,128,128,0.3)',
+                griddash='dash'
+            ),
+            yaxis=dict(
+                title='',
+                tickfont=dict(size=10)
+            ),
+            height=500,
+            margin=dict(l=10, r=80, t=50, b=50),
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            showlegend=False
+        )
         
-        st.pyplot(fig)
-        plt.close()
+        # Remove top and right axis lines (like original)
+        fig.update_xaxes(showline=True, linewidth=1, linecolor='black', mirror=False)
+        fig.update_yaxes(showline=True, linewidth=1, linecolor='black', mirror=False)
+        
+        st.plotly_chart(fig, use_container_width=True)
         
         # ============================================
         # TOP 10 TRENDS OVER TIME
