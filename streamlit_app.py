@@ -204,13 +204,11 @@ def main():
             col_messages = col
     
     # ============================================
-    # SIDEBAR - TRENDING TOPICS TAB
+    # SIDEBAR - TRENDING TOPICS TAB (Collapsible)
     # ============================================
-    st.sidebar.header("📈 Trending Topics")
-    
-    # Column mapping in expander (for advanced users)
-    with st.sidebar.expander("⚙️ Column Mapping (click to configure)"):
-        st.caption("Select which columns to use for filtering and analysis")
+    with st.sidebar.expander("📈 Trending Topics", expanded=True):
+        # Column mapping section
+        st.markdown("**⚙️ Column Mapping**")
         all_columns = ['None'] + df.columns.tolist()
         
         col_level1 = st.selectbox("Category Column", all_columns, 
@@ -226,62 +224,67 @@ def main():
                                           index=all_columns.index(col_conversations) if col_conversations in all_columns else 0,
                                           key="col_conv")
         
-        st.caption(f"Available columns: {', '.join(df.columns.tolist())}")
-    
-    # Filters section
-    st.sidebar.subheader("🔍 Filters")
-    
-    # Category filter (Level 1)
-    selected_level1 = 'All'
-    if col_level1 and col_level1 != 'None' and col_level1 in df.columns:
-        level1_values = sorted([str(x) for x in df[col_level1].dropna().unique().tolist()])
-        level1_options = ['All'] + level1_values
-        selected_level1 = st.sidebar.selectbox(
-            f"📁 Category ({col_level1})", 
-            level1_options,
-            help=f"Filter by {col_level1} - {len(level1_values)} unique values"
-        )
-    else:
-        st.sidebar.warning("⚠️ No category column detected. Configure in Column Mapping above.")
-    
-    # Subcategory filter (Level 2) - dependent on category
-    selected_level2 = 'All'
-    if col_level2 and col_level2 != 'None' and col_level2 in df.columns:
-        if selected_level1 == 'All':
-            level2_values = sorted([str(x) for x in df[col_level2].dropna().unique().tolist()])
-        else:
-            level2_values = sorted([str(x) for x in df[df[col_level1] == selected_level1][col_level2].dropna().unique().tolist()])
-        level2_options = ['All'] + level2_values
-        selected_level2 = st.sidebar.selectbox(
-            f"📂 Subcategory ({col_level2})", 
-            level2_options,
-            help=f"Filter by {col_level2} - {len(level2_values)} unique values"
-        )
-    
-    # Date filter (if date column exists)
-    start_date = end_date = None
-    if col_date and col_date in df.columns:
-        try:
-            df[col_date] = pd.to_datetime(df[col_date])
-            min_date = df[col_date].min().date()
-            max_date = df[col_date].max().date()
-            
-            date_range = st.sidebar.date_input(
-                "📅 Date Range",
-                value=(min_date, max_date),
-                min_value=min_date,
-                max_value=max_date
+        st.divider()
+        
+        # Filters section
+        st.markdown("**🔍 Filters**")
+        
+        # Category filter (Level 1)
+        selected_level1 = 'All'
+        if col_level1 and col_level1 != 'None' and col_level1 in df.columns:
+            level1_values = sorted([str(x) for x in df[col_level1].dropna().unique().tolist()])
+            level1_options = ['All'] + level1_values
+            selected_level1 = st.selectbox(
+                f"📁 Category ({col_level1})", 
+                level1_options,
+                help=f"Filter by {col_level1} - {len(level1_values)} unique values"
             )
-            
-            if isinstance(date_range, tuple) and len(date_range) == 2:
-                start_date, end_date = date_range
+        else:
+            st.warning("⚠️ No category column detected.")
+        
+        # Subcategory filter (Level 2) - dependent on category
+        selected_level2 = 'All'
+        if col_level2 and col_level2 != 'None' and col_level2 in df.columns:
+            if selected_level1 == 'All':
+                level2_values = sorted([str(x) for x in df[col_level2].dropna().unique().tolist()])
             else:
-                start_date = end_date = date_range
-        except Exception:
-            pass  # Skip date filter if conversion fails
+                level2_values = sorted([str(x) for x in df[df[col_level1] == selected_level1][col_level2].dropna().unique().tolist()])
+            level2_options = ['All'] + level2_values
+            selected_level2 = st.selectbox(
+                f"📂 Subcategory ({col_level2})", 
+                level2_options,
+                help=f"Filter by {col_level2} - {len(level2_values)} unique values"
+            )
+        
+        # Date filter (if date column exists)
+        start_date = end_date = None
+        if col_date and col_date in df.columns:
+            try:
+                df[col_date] = pd.to_datetime(df[col_date])
+                min_date = df[col_date].min().date()
+                max_date = df[col_date].max().date()
+                
+                date_range = st.date_input(
+                    "📅 Date Range",
+                    value=(min_date, max_date),
+                    min_value=min_date,
+                    max_value=max_date
+                )
+                
+                if isinstance(date_range, tuple) and len(date_range) == 2:
+                    start_date, end_date = date_range
+                else:
+                    start_date = end_date = date_range
+            except Exception:
+                pass  # Skip date filter if conversion fails
+        
+        st.divider()
+        
+        # Show filter summary inside the expander
+        st.success(f"✅ Showing {len(df):,} rows")
     
     # ============================================
-    # APPLY FILTERS
+    # APPLY FILTERS (outside expander to use variables)
     # ============================================
     filtered_df = df.copy()
     
@@ -303,8 +306,7 @@ def main():
         except Exception:
             pass
     
-    # Show filter summary
-    st.sidebar.divider()
+    # Update filter summary in sidebar
     st.sidebar.success(f"✅ Showing {len(filtered_df):,} of {len(df):,} rows")
     
     # Main content area
@@ -534,15 +536,6 @@ def main():
     else:
         st.warning("⚠️ No data found with the selected filters. Please adjust your filter criteria.")
     
-    # Sidebar info
-    with st.sidebar.expander("ℹ️ How to use"):
-        st.markdown("""
-        1. Select date range (if available)
-        2. Choose Category filter
-        3. Choose Subcategory filter
-        4. View top 10 topics visualization
-        5. Download filtered data if needed
-        """)
 
 if __name__ == "__main__":
     main()
