@@ -158,128 +158,243 @@ def create_top_topics_plot(df, top_n=10, title_suffix=""):
     plt.tight_layout()
     return fig
 
+import ast
+
+def parse_brands(brands_str):
+    """Parse brands column from string to list"""
+    if pd.isna(brands_str) or brands_str == '[]':
+        return []
+    try:
+        return ast.literal_eval(brands_str)
+    except:
+        return []
+
 def render_brand_perception(bp_df, search_type, search_value):
-    """Render the Brand Perception analysis tab"""
-    st.subheader("🏷️ Brand Perception Analysis")
+    """Render the Brand Perception analysis tab based on search type"""
     
     # Apply search filter
+    filtered_df = bp_df.copy()
+    
     if search_value:
         if search_type == "Brand":
-            # Search in brands column (contains brand name)
-            bp_df = bp_df[bp_df['brands'].astype(str).str.lower().str.contains(search_value.lower(), na=False)]
+            # Filter by brand
+            filtered_df = filtered_df[filtered_df['brands'].astype(str).str.lower().str.contains(search_value.lower(), na=False)]
         else:  # Topic
-            # Search in topic column
-            bp_df = bp_df[bp_df['topic'].astype(str).str.lower().str.contains(search_value.lower(), na=False)]
+            # Filter by topic
+            filtered_df = filtered_df[filtered_df['topic'].astype(str).str.lower().str.contains(search_value.lower(), na=False)]
+    
+    if len(filtered_df) == 0:
+        st.warning(f"No results found for '{search_value}' in {search_type}.")
+        return
     
     # Metrics row
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Total Keywords", f"{len(bp_df):,}")
+        st.metric("Total Keywords", f"{len(filtered_df):,}")
     with col2:
-        st.metric("Unique Topics", f"{bp_df['topic'].nunique():,}")
+        st.metric("Unique Topics", f"{filtered_df['topic'].nunique():,}")
     with col3:
-        st.metric("Total Volume", f"{bp_df['volume'].sum():,.0f}")
+        st.metric("Total Volume", f"{filtered_df['volume'].sum():,.0f}")
     with col4:
-        unique_cats = bp_df['level1'].dropna().nunique()
-        st.metric("Categories", f"{unique_cats:,}")
+        # Count unique brands
+        all_brands = []
+        for brands in filtered_df['brands_list']:
+            all_brands.extend(brands)
+        st.metric("Unique Brands", f"{len(set(all_brands)):,}")
     
     st.divider()
     
-    # Top Topics by Volume
-    st.subheader("📊 Top 15 Topics by Search Volume")
-    
-    # Aggregate by topic
-    topic_agg = bp_df.groupby('topic', as_index=False).agg({
-        'volume': 'sum',
-        'keyword': 'count'
-    }).rename(columns={'keyword': 'keyword_count'}).sort_values('volume', ascending=False).head(15)
-    
-    # Reverse for horizontal bar chart
-    topic_agg_plot = topic_agg.iloc[::-1]
-    
-    # Create viridis colors
-    n_topics = len(topic_agg_plot)
-    viridis_colors = px.colors.sample_colorscale('viridis', [i/(n_topics-1) if n_topics > 1 else 0 for i in range(n_topics)])
-    
-    fig_topics = go.Figure(go.Bar(
-        x=topic_agg_plot['volume'],
-        y=topic_agg_plot['topic'],
-        orientation='h',
-        marker=dict(color=viridis_colors),
-        text=[f'{val:,.0f}' for val in topic_agg_plot['volume']],
-        textposition='outside',
-        textfont=dict(size=11, color='black'),
-        hovertemplate='<b>%{y}</b><br>Volume: %{x:,.0f}<extra></extra>'
-    ))
-    
-    fig_topics.update_layout(
-        title=dict(text='Top 15 Topics by Search Volume', font=dict(size=14), x=0.5, xanchor='center'),
-        xaxis=dict(title='Search Volume', showgrid=True, gridcolor='rgba(128,128,128,0.3)', griddash='dash'),
-        yaxis=dict(title='', tickfont=dict(size=10)),
-        height=500,
-        margin=dict(l=10, r=80, t=50, b=50),
-        plot_bgcolor='white',
-        paper_bgcolor='white',
-        showlegend=False
-    )
-    
-    st.plotly_chart(fig_topics, use_container_width=True)
-    
-    st.divider()
-    
-    # Top Keywords by Volume
-    st.subheader("🔑 Top 15 Keywords by Volume")
-    
-    top_keywords = bp_df.nlargest(15, 'volume')[['keyword', 'volume', 'topic', 'level1', 'level2']].copy()
-    top_keywords.index = range(1, len(top_keywords) + 1)
-    
-    st.dataframe(top_keywords, use_container_width=True, height=400)
-    
-    st.divider()
-    
-    # Category breakdown
-    st.subheader("📁 Volume by Category")
-    
-    # Filter out empty categories
-    cat_df = bp_df[bp_df['level1'].notna() & (bp_df['level1'] != '')].copy()
-    if len(cat_df) > 0:
-        cat_agg = cat_df.groupby('level1', as_index=False).agg({
+    # Different displays based on search type
+    if search_type == "Brand" and search_value:
+        # BRAND SEARCH: Show topics with aggregated volume
+        st.subheader(f"📊 Topics for Brand: {search_value}")
+        
+        # Aggregate by topic
+        topic_agg = filtered_df.groupby('topic', as_index=False).agg({
             'volume': 'sum',
             'keyword': 'count'
-        }).rename(columns={'keyword': 'keyword_count'}).sort_values('volume', ascending=False).head(10)
+        }).rename(columns={'keyword': 'keyword_count'}).sort_values('volume', ascending=False).head(15)
         
-        fig_cat = px.pie(
-            cat_agg, 
-            values='volume', 
-            names='level1', 
-            title='Volume Distribution by Category',
-            color_discrete_sequence=px.colors.qualitative.Set2
-        )
-        fig_cat.update_traces(textposition='inside', textinfo='percent+label')
-        fig_cat.update_layout(height=450)
+        if len(topic_agg) > 0:
+            # Reverse for horizontal bar chart
+            topic_agg_plot = topic_agg.iloc[::-1]
+            
+            n_items = len(topic_agg_plot)
+            viridis_colors = px.colors.sample_colorscale('viridis', [i/(n_items-1) if n_items > 1 else 0 for i in range(n_items)])
+            
+            fig = go.Figure(go.Bar(
+                x=topic_agg_plot['volume'],
+                y=topic_agg_plot['topic'],
+                orientation='h',
+                marker=dict(color=viridis_colors),
+                text=[f'{val:,.0f}' for val in topic_agg_plot['volume']],
+                textposition='outside',
+                textfont=dict(size=11, color='black'),
+                hovertemplate='<b>%{y}</b><br>Volume: %{x:,.0f}<extra></extra>'
+            ))
+            
+            fig.update_layout(
+                title=dict(text=f'Topics Associated with "{search_value}"', font=dict(size=14), x=0.5, xanchor='center'),
+                xaxis=dict(title='Search Volume', showgrid=True, gridcolor='rgba(128,128,128,0.3)', griddash='dash'),
+                yaxis=dict(title='', tickfont=dict(size=10)),
+                height=500,
+                margin=dict(l=10, r=80, t=50, b=50),
+                plot_bgcolor='white',
+                paper_bgcolor='white',
+                showlegend=False
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
         
-        st.plotly_chart(fig_cat, use_container_width=True)
+        # Show keywords table
+        st.subheader("🔑 Keywords mentioning this brand")
+        display_df = filtered_df[['keyword', 'topic', 'volume', 'brands']].sort_values('volume', ascending=False).head(50)
+        display_df.index = range(1, len(display_df) + 1)
+        st.dataframe(display_df, use_container_width=True, height=400)
+        
+    elif search_type == "Topic" and search_value:
+        # TOPIC SEARCH: Show mentioned brands
+        st.subheader(f"🏷️ Brands mentioned in Topic: {search_value}")
+        
+        # Extract all brands from filtered data
+        brand_volume = []
+        for _, row in filtered_df.iterrows():
+            for brand in row['brands_list']:
+                brand_volume.append({'brand': brand, 'volume': row['volume']})
+        
+        if brand_volume:
+            brand_df = pd.DataFrame(brand_volume)
+            brand_agg = brand_df.groupby('brand', as_index=False).agg({
+                'volume': 'sum'
+            }).sort_values('volume', ascending=False).head(15)
+            
+            # Reverse for horizontal bar chart
+            brand_agg_plot = brand_agg.iloc[::-1]
+            
+            n_items = len(brand_agg_plot)
+            viridis_colors = px.colors.sample_colorscale('viridis', [i/(n_items-1) if n_items > 1 else 0 for i in range(n_items)])
+            
+            fig = go.Figure(go.Bar(
+                x=brand_agg_plot['volume'],
+                y=brand_agg_plot['brand'],
+                orientation='h',
+                marker=dict(color=viridis_colors),
+                text=[f'{val:,.0f}' for val in brand_agg_plot['volume']],
+                textposition='outside',
+                textfont=dict(size=11, color='black'),
+                hovertemplate='<b>%{y}</b><br>Volume: %{x:,.0f}<extra></extra>'
+            ))
+            
+            fig.update_layout(
+                title=dict(text=f'Brands mentioned in "{search_value}"', font=dict(size=14), x=0.5, xanchor='center'),
+                xaxis=dict(title='Search Volume', showgrid=True, gridcolor='rgba(128,128,128,0.3)', griddash='dash'),
+                yaxis=dict(title='', tickfont=dict(size=10)),
+                height=500,
+                margin=dict(l=10, r=80, t=50, b=50),
+                plot_bgcolor='white',
+                paper_bgcolor='white',
+                showlegend=False
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No brands found in this topic.")
+        
+        # Show keywords table
+        st.subheader("🔑 Keywords in this topic")
+        display_df = filtered_df[['keyword', 'topic', 'volume', 'brands']].sort_values('volume', ascending=False).head(50)
+        display_df.index = range(1, len(display_df) + 1)
+        st.dataframe(display_df, use_container_width=True, height=400)
+        
     else:
-        st.info("No category data available.")
+        # DEFAULT VIEW: Show top topics and brands overview
+        st.subheader("📊 Top 15 Topics by Search Volume")
+        
+        # Aggregate by topic
+        topic_agg = filtered_df.groupby('topic', as_index=False).agg({
+            'volume': 'sum',
+            'keyword': 'count'
+        }).rename(columns={'keyword': 'keyword_count'}).sort_values('volume', ascending=False).head(15)
+        
+        topic_agg_plot = topic_agg.iloc[::-1]
+        n_topics = len(topic_agg_plot)
+        viridis_colors = px.colors.sample_colorscale('viridis', [i/(n_topics-1) if n_topics > 1 else 0 for i in range(n_topics)])
+        
+        fig_topics = go.Figure(go.Bar(
+            x=topic_agg_plot['volume'],
+            y=topic_agg_plot['topic'],
+            orientation='h',
+            marker=dict(color=viridis_colors),
+            text=[f'{val:,.0f}' for val in topic_agg_plot['volume']],
+            textposition='outside',
+            textfont=dict(size=11, color='black'),
+            hovertemplate='<b>%{y}</b><br>Volume: %{x:,.0f}<extra></extra>'
+        ))
+        
+        fig_topics.update_layout(
+            title=dict(text='Top 15 Topics by Search Volume', font=dict(size=14), x=0.5, xanchor='center'),
+            xaxis=dict(title='Search Volume', showgrid=True, gridcolor='rgba(128,128,128,0.3)', griddash='dash'),
+            yaxis=dict(title='', tickfont=dict(size=10)),
+            height=500,
+            margin=dict(l=10, r=80, t=50, b=50),
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            showlegend=False
+        )
+        
+        st.plotly_chart(fig_topics, use_container_width=True)
+        
+        st.divider()
+        
+        # Top Brands
+        st.subheader("🏷️ Top 15 Brands by Search Volume")
+        
+        brand_volume = []
+        for _, row in filtered_df.iterrows():
+            for brand in row['brands_list']:
+                brand_volume.append({'brand': brand, 'volume': row['volume']})
+        
+        if brand_volume:
+            brand_df = pd.DataFrame(brand_volume)
+            brand_agg = brand_df.groupby('brand', as_index=False).agg({
+                'volume': 'sum'
+            }).sort_values('volume', ascending=False).head(15)
+            
+            brand_agg_plot = brand_agg.iloc[::-1]
+            n_brands = len(brand_agg_plot)
+            viridis_colors = px.colors.sample_colorscale('viridis', [i/(n_brands-1) if n_brands > 1 else 0 for i in range(n_brands)])
+            
+            fig_brands = go.Figure(go.Bar(
+                x=brand_agg_plot['volume'],
+                y=brand_agg_plot['brand'],
+                orientation='h',
+                marker=dict(color=viridis_colors),
+                text=[f'{val:,.0f}' for val in brand_agg_plot['volume']],
+                textposition='outside',
+                textfont=dict(size=11, color='black'),
+                hovertemplate='<b>%{y}</b><br>Volume: %{x:,.0f}<extra></extra>'
+            ))
+            
+            fig_brands.update_layout(
+                title=dict(text='Top 15 Brands by Search Volume', font=dict(size=14), x=0.5, xanchor='center'),
+                xaxis=dict(title='Search Volume', showgrid=True, gridcolor='rgba(128,128,128,0.3)', griddash='dash'),
+                yaxis=dict(title='', tickfont=dict(size=10)),
+                height=500,
+                margin=dict(l=10, r=80, t=50, b=50),
+                plot_bgcolor='white',
+                paper_bgcolor='white',
+                showlegend=False
+            )
+            
+            st.plotly_chart(fig_brands, use_container_width=True)
     
     st.divider()
-    
-    # Full data table
-    st.subheader("📋 Data Table")
-    
-    display_cols = ['keyword', 'topic', 'volume', 'level1', 'level2', 'brands']
-    available_cols = [c for c in display_cols if c in bp_df.columns]
-    display_table = bp_df[available_cols].copy()
-    display_table = display_table.sort_values('volume', ascending=False).head(100)
-    display_table.index = range(1, len(display_table) + 1)
-    
-    st.dataframe(display_table, use_container_width=True, height=400)
     
     # Download
     st.subheader("💾 Download Data")
-    csv = bp_df.to_csv(index=False)
+    csv = filtered_df.to_csv(index=False)
     st.download_button(
-        label="Download Filtered Brand Data as CSV",
+        label="Download Filtered Data as CSV",
         data=csv,
         file_name="brand_perception_data.csv",
         mime="text/csv"
@@ -304,90 +419,141 @@ def main():
     # BRAND PERCEPTION TAB
     # ============================================
     if selected_tab == "🏷️ Brand Perception":
-        # Load brand perception data
+        # Load both data files
         bp_url = "https://raw.githubusercontent.com/litancherikover/Topic_analysis/main/keywords_with_l1_l2.csv"
+        topics_url = "https://raw.githubusercontent.com/litancherikover/Topic_analysis/main/Prompts%20(1).csv"
         
         with st.spinner("Loading Brand Perception data..."):
             bp_df = load_data(bp_url, file_type="csv")
+            topics_df = load_data(topics_url, file_type="csv")
         
         if bp_df is None:
             st.error("Failed to load Brand Perception data.")
             st.stop()
         
-        # Create topic column: combination of level1 > level2 > keyword
-        def create_topic(row):
-            parts = []
-            if pd.notna(row.get('level1')) and row.get('level1'):
-                parts.append(str(row['level1']))
-            if pd.notna(row.get('level2')) and row.get('level2'):
-                parts.append(str(row['level2']))
-            if parts:
-                return ' > '.join(parts)
-            else:
-                return str(row.get('keyword', 'Unknown'))
+        # Get unique topics from Prompts file
+        if topics_df is not None:
+            # Create topic mapping from category + sub_category to topics
+            topic_mapping = topics_df[['topic', 'category', 'sub_category']].drop_duplicates()
+            topic_mapping = topic_mapping[topic_mapping['topic'] != 'all']  # Exclude 'all'
+            
+            # Merge to get real topics
+            bp_df = bp_df.merge(
+                topic_mapping,
+                left_on=['level1', 'level2'],
+                right_on=['category', 'sub_category'],
+                how='left'
+            )
+            bp_df['topic'] = bp_df['topic'].fillna(bp_df['level1'] + ' > ' + bp_df['level2'].fillna(''))
+            bp_df['topic'] = bp_df['topic'].replace('', 'Uncategorized')
+        else:
+            # Fallback: create topic from level1 > level2
+            bp_df['topic'] = bp_df['level1'].fillna('') + ' > ' + bp_df['level2'].fillna('')
+            bp_df['topic'] = bp_df['topic'].replace(' > ', 'Uncategorized')
         
-        bp_df['topic'] = bp_df.apply(create_topic, axis=1)
+        # Parse brands column to list
+        bp_df['brands_list'] = bp_df['brands'].apply(parse_brands)
         
-        # Brand Perception filters in sidebar
-        with st.sidebar.expander("🏷️ Brand Perception", expanded=True):
-            # Search by Brand or Topic
-            st.markdown("**🔎 Search By**")
-            search_col1, search_col2 = st.columns([1, 1])
-            with search_col1:
-                search_type = st.radio(
-                    "Search type",
-                    ["Brand", "Topic"],
-                    horizontal=True,
-                    label_visibility="collapsed",
-                    key="bp_search_type"
+        # Convert date column
+        if 'date' in bp_df.columns:
+            bp_df['date'] = pd.to_datetime(bp_df['date'])
+        
+        # ============================================
+        # FILTERS ON MAIN PAGE (not sidebar)
+        # ============================================
+        st.subheader("🏷️ Brand Perception Analysis")
+        
+        # Search By section
+        st.markdown("### 🔎 Search By")
+        search_col1, search_col2, search_col3 = st.columns([1, 1, 2])
+        
+        with search_col1:
+            search_type = st.radio(
+                "Search type",
+                ["Brand", "Topic"],
+                horizontal=True,
+                key="bp_search_type"
+            )
+        
+        with search_col2:
+            if search_type == "Brand":
+                # Get unique brands for dropdown
+                all_brands = set()
+                for brands in bp_df['brands_list']:
+                    all_brands.update(brands)
+                brand_options = [''] + sorted(list(all_brands))
+                search_value = st.selectbox(
+                    "Select Brand",
+                    brand_options,
+                    key="bp_brand_select"
                 )
-            
-            search_value = st.text_input(
-                f"Search {search_type}",
-                placeholder=f"Enter {search_type.lower()} name...",
-                key="bp_search_value"
-            )
-            
-            st.divider()
-            
-            st.markdown("**🔍 Filters**")
-            
-            # Category filter
-            bp_selected_cat = 'All'
-            cat_values = sorted([str(x) for x in bp_df['level1'].dropna().unique().tolist() if x])
-            cat_options = ['All'] + cat_values
-            bp_selected_cat = st.selectbox(
-                "📁 Category",
-                cat_options,
-                key="bp_cat"
-            )
-            
-            # Subcategory filter (dependent on category)
-            bp_selected_subcat = 'All'
-            if bp_selected_cat == 'All':
-                subcat_values = sorted([str(x) for x in bp_df['level2'].dropna().unique().tolist() if x])
             else:
-                subcat_values = sorted([str(x) for x in bp_df[bp_df['level1'] == bp_selected_cat]['level2'].dropna().unique().tolist() if x])
-            subcat_options = ['All'] + subcat_values
-            bp_selected_subcat = st.selectbox(
-                "📂 Subcategory",
-                subcat_options,
-                key="bp_subcat"
-            )
-            
-            st.divider()
-            st.success(f"✅ {len(bp_df):,} total rows")
+                # Get unique topics for dropdown
+                topic_options = [''] + sorted(bp_df['topic'].dropna().unique().tolist())
+                search_value = st.selectbox(
+                    "Select Topic",
+                    topic_options,
+                    key="bp_topic_select"
+                )
+        
+        st.divider()
+        
+        # Filter row: Date, Country
+        st.markdown("### 🔍 Filters")
+        filter_col1, filter_col2, filter_col3 = st.columns(3)
+        
+        with filter_col1:
+            # Date filter
+            if 'date' in bp_df.columns:
+                min_date = bp_df['date'].min().date()
+                max_date = bp_df['date'].max().date()
+                date_range = st.date_input(
+                    "📅 Date Range",
+                    value=(min_date, max_date),
+                    min_value=min_date,
+                    max_value=max_date,
+                    key="bp_date"
+                )
+            else:
+                date_range = None
+        
+        with filter_col2:
+            # Country filter
+            if 'country' in bp_df.columns:
+                country_values = sorted([str(x) for x in bp_df['country'].dropna().unique().tolist()])
+                country_options = ['All'] + country_values
+                selected_country = st.selectbox(
+                    "🌍 Country",
+                    country_options,
+                    key="bp_country"
+                )
+            else:
+                selected_country = 'All'
+        
+        with filter_col3:
+            # Show row count
+            st.metric("Total Rows", f"{len(bp_df):,}")
+        
+        st.divider()
         
         # Apply filters
         filtered_bp = bp_df.copy()
         
-        if bp_selected_cat != 'All':
-            filtered_bp = filtered_bp[filtered_bp['level1'] == bp_selected_cat]
+        # Date filter
+        if date_range and 'date' in bp_df.columns:
+            if isinstance(date_range, tuple) and len(date_range) == 2:
+                start_date, end_date = date_range
+                filtered_bp = filtered_bp[
+                    (filtered_bp['date'].dt.date >= start_date) & 
+                    (filtered_bp['date'].dt.date <= end_date)
+                ]
         
-        if bp_selected_subcat != 'All':
-            filtered_bp = filtered_bp[filtered_bp['level2'] == bp_selected_subcat]
+        # Country filter
+        if selected_country != 'All' and 'country' in bp_df.columns:
+            filtered_bp = filtered_bp[filtered_bp['country'].astype(str) == selected_country]
         
-        st.sidebar.success(f"✅ Showing {len(filtered_bp):,} of {len(bp_df):,} rows")
+        # Show filtered count
+        st.info(f"✅ Showing {len(filtered_bp):,} of {len(bp_df):,} rows after filters")
         
         # Render brand perception content
         render_brand_perception(filtered_bp, search_type, search_value)
