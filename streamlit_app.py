@@ -158,9 +158,18 @@ def create_top_topics_plot(df, top_n=10, title_suffix=""):
     plt.tight_layout()
     return fig
 
-def render_brand_perception(bp_df):
+def render_brand_perception(bp_df, search_type, search_value):
     """Render the Brand Perception analysis tab"""
     st.subheader("🏷️ Brand Perception Analysis")
+    
+    # Apply search filter
+    if search_value:
+        if search_type == "Brand":
+            # Search in brands column (contains brand name)
+            bp_df = bp_df[bp_df['brands'].astype(str).str.lower().str.contains(search_value.lower(), na=False)]
+        else:  # Topic
+            # Search in topic column
+            bp_df = bp_df[bp_df['topic'].astype(str).str.lower().str.contains(search_value.lower(), na=False)]
     
     # Metrics row
     col1, col2, col3, col4 = st.columns(4)
@@ -321,6 +330,26 @@ def main():
         
         # Brand Perception filters in sidebar
         with st.sidebar.expander("🏷️ Brand Perception", expanded=True):
+            # Search by Brand or Topic
+            st.markdown("**🔎 Search By**")
+            search_col1, search_col2 = st.columns([1, 1])
+            with search_col1:
+                search_type = st.radio(
+                    "Search type",
+                    ["Brand", "Topic"],
+                    horizontal=True,
+                    label_visibility="collapsed",
+                    key="bp_search_type"
+                )
+            
+            search_value = st.text_input(
+                f"Search {search_type}",
+                placeholder=f"Enter {search_type.lower()} name...",
+                key="bp_search_value"
+            )
+            
+            st.divider()
+            
             st.markdown("**🔍 Filters**")
             
             # Category filter
@@ -361,7 +390,7 @@ def main():
         st.sidebar.success(f"✅ Showing {len(filtered_bp):,} of {len(bp_df):,} rows")
         
         # Render brand perception content
-        render_brand_perception(filtered_bp)
+        render_brand_perception(filtered_bp, search_type, search_value)
         return
     
     # ============================================
